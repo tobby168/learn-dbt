@@ -1,0 +1,4 @@
+# dbt v2 (Fusion-based engine, DuckDB adapter built in).
+# Keep this separate from requirements-metricflow.txt: dbt-metricflow depends on
+# dbt-core 1.x, which ships its own `dbt` command and would overwrite v2's.
+dbt>=2.0,<3

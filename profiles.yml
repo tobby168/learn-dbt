@@ -1,0 +1,11 @@
+# Local DuckDB profile for dbt v2 (no warehouse account needed).
+# dbt resolves `path` relative to this file. dbt platform ignores this file
+# and uses the connection you configure in the UI instead.
+default:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: ./jaffle_shop.duckdb
+      schema: main
+      threads: 4

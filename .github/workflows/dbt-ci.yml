@@ -1,0 +1,21 @@
+name: dbt CI
+
+# Runs the same flow as `make all`: dbt v2 builds jaffle-shop into a throwaway
+# DuckDB file, then MetricFlow validates the semantic layer. No secrets needed.
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: make all
+      - run: make metrics-query
