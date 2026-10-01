@@ -51,7 +51,8 @@ dbt build                             # 全部：13 個 models、27 個 tests、
 3. **加一個 staging 欄位。** 在 `stg_orders.sql` 加一個衍生欄位，用 `dbt build --select stg_orders+`
    看下游怎麼反應。
 4. **改成 incremental。** 把 `orders` 改成 incremental model，思考 `unique_key` 和增量條件要怎麼設，
-   並用 `--full-refresh` 比對結果。
+   並用 `--full-refresh` 比對結果。本機 DuckDB 可以直接做；如果之後在 BigQuery **沙盒**（沒開 billing）
+   上做，incremental 需要 DML，會失敗，細節見 [03](03-dbt-platform.md)。
 
 ## v2 + DuckDB 的已知限制（出自官方文件）
 

@@ -27,12 +27,62 @@
 
 1. **DuckDB 在 dbt platform 是「CLI only」，平台不能連。** dbt platform 上的 v2 支援 Snowflake、
    Amazon Redshift、Databricks、Google BigQuery（ClickHouse 為 private beta）。所以練習 Studio IDE
-   和 production job 時，要準備其中一種雲端 warehouse。
+   和 production job 時，要準備其中一種雲端 warehouse（免費方案見下一節）。
    （[About connections](https://docs.getdbt.com/docs/cloud/connect-data-platform/about-connections)、
    [Supported data platforms](https://docs.getdbt.com/docs/supported-data-platforms)）
 2. **Environment 的 dbt 版本要選 v2.0.0 以上。** 本專案的 `dbt_project.yml` 有
    `require-dbt-version: ">=2.0.0"`，選到 v1.x 會在版本檢查時失敗。
 3. **本機的 `profiles.yml` 在平台上沒有作用**，平台使用你在 Account settings → Connections 設定的連線。
+
+## Studio IDE 跑在哪裡
+
+Studio IDE 是 dbt platform 託管的網頁應用，在你筆電的瀏覽器裡開啟，直接連你的 GitHub repo 和
+warehouse。它**不會連到我（Claude）的雲端環境**，我的環境只是用來寫程式和推送；
+只要程式碼在 GitHub 上，任何一台能上網的電腦都能用。官方列出的前置條件：
+
+- dbt 帳號和一個 Developer seat
+- 一個 git repo，且 git provider 要有**寫入權限**（連 GitHub 是安裝 dbt 的 GitHub App）
+- 專案已連到 warehouse，並設定好開發環境和個人憑證
+- 建議關閉廣告攔截器：有些檔名（例如 `google_adwords.sql`）會被誤判成廣告而攔掉
+
+要注意的是：**這個專案目前在分支 `claude/ecstatic-goldberg-xdtgie`，還沒進 `main`。**
+Production environment 要跑 `main`，Studio 預設開的也是預設分支，所以要先把分支合併進 `main`。
+
+來源：[Studio IDE](https://docs.getdbt.com/docs/cloud/studio-ide/develop-in-studio)、
+[Connect GitHub](https://docs.getdbt.com/docs/cloud/git/connect-github)
+
+## 哪個 warehouse 有免費方案
+
+| Warehouse | 免費方案 | 備註 |
+|---|---|---|
+| **BigQuery（建議）** | 免費額度**長期有效**：每月 10 GiB 儲存、1 TiB 查詢。另有 sandbox 模式，不需信用卡或 billing 帳號 | sandbox 有限制，見下方 |
+| Snowflake | 30 天試用、$400 額度，註冊不需付款資訊 | 倒數型，到期或額度用完就要付費 |
+| Redshift Serverless | $300 額度，90 天內使用（限從沒用過 Redshift Serverless 的帳號） | 倒數型，需要 AWS 帳號 |
+| Databricks | 有 Free Edition，但只有一個 2X-Small SQL warehouse，且對外連線限於少數信任網域 | 我沒查到 dbt platform 能不能連到 Free Edition，**不建議** |
+
+建議 BigQuery：額度不會倒數、dbt 官方的 BigQuery quickstart 就是用它，而且上游 jaffle-shop 有
+BigQuery 版本的 macro（`bigquery__cents_to_dollars`）。
+來源：[BigQuery sandbox](https://cloud.google.com/bigquery/docs/sandbox)、
+[BigQuery pricing](https://cloud.google.com/bigquery/pricing)、
+[AWS Redshift free trial](https://aws.amazon.com/redshift/free-trial/)、
+[Snowflake trial accounts](https://docs.snowflake.com/en/user-guide/admin-trial-account)、
+[Databricks Free Edition 限制](https://docs.databricks.com/aws/en/getting-started/free-edition-limitations)
+
+### BigQuery sandbox 的限制
+
+沙盒不需要信用卡，但有這些限制：
+
+- 終身 10 GiB 儲存額度（刪除資料也不會退還）；所有 tables、views 預設 **60 天後自動過期**。
+- **不支援 DML 語句和 streaming。**
+
+對本專案的影響：
+
+- `dbt build` 建 view 和 table 用的是 DDL，不受影響（dbt 官方 quickstart 就是在沒開 billing 的專案做的）。
+- **incremental model 和 snapshot 需要 DML**，在沙盒會失敗，所以 [01](01-models.md) 的練習 4 要先升級。
+- seed 在「v2 + BigQuery 沙盒」下能不能載入，**我沒有驗證**（我沒有 GCP 帳號）。如果 `dbt seed` 失敗，
+  請升級。
+- 升級的做法是替專案開 billing 帳號。Google 說明開了之後，免費額度仍然保留，超過才收費；
+  本專案的資料只有約 16 MB，遠低於額度。建議在 Google Cloud 設定預算提醒。
 
 ## AI 功能：dbt Wizard 與 dbt Copilot
 
@@ -57,12 +107,24 @@ Wizard 的免費額度（[官方 FAQ](https://docs.getdbt.com/docs/dbt-ai/wizard
 
 ## 部署步驟
 
-### 1. 準備 warehouse 和帳號
+### 1. 準備 BigQuery 和 dbt platform
 
-1. 在你的 warehouse 建一個空的資料庫／專案給 jaffle-shop 用，並備好有建立 schema 和資料表權限的帳號。
-2. 註冊 dbt platform（Developer 方案），建立專案，依[各 warehouse 的 Quickstart](https://docs.getdbt.com/guides)
-   設定 connection。
-3. 把你的 GitHub repo（也就是這個 repo）連到專案。dbt 專案就在 repo 根目錄，不需要設定子目錄。
+以下依 [dbt 的 BigQuery quickstart](https://docs.getdbt.com/guides/bigquery) 和
+[連線文件](https://docs.getdbt.com/docs/cloud/connect-data-platform/connect-bigquery)整理：
+
+1. 用 Google 帳號進 BigQuery Console，建立一個新的 GCP project（先不用開 billing）。
+2. 建立 dataset：`raw`（seed 載入的位置）和 `prod`（Prod environment 的 schema）。
+   location 維持預設的 US；建議同一個專案的 dataset 都放同一個 location，避免跨 location 的查詢失敗。
+3. 建立 service account（例如 `dbt-user`），角色給 **BigQuery Job User** 和 **BigQuery Data Editor**。
+   官方說明 v2 還需要 **BigQuery Read Session User**（Storage Read API）。下載 JSON key，
+   **不要 commit 進 git**。
+4. 註冊 dbt platform（Developer 方案）→ Account settings → New project → 選 BigQuery →
+   上傳 JSON key。接著到 Your profile → Credentials，認證方式選 Service Account JSON，
+   dataset 用預設值（慣例是 `dbt_<首字母><姓>`，開發時 model 會建在這裡），按 Test Connection。
+   如果 build 時說沒有權限建立 dataset，就手動建同名 dataset，或幫 service account 加 BigQuery User 角色。
+5. 連 GitHub：Account settings → Your profile → Linked accounts 連結 GitHub，安裝 dbt 的 GitHub App
+   並授權這個 repo。dbt 專案就在 repo 根目錄，不需要設定子目錄。
+6. 先把分支合併進 `main`，再開始在 Studio IDE 開發。
 
 ### 2. 在 Studio IDE 跑通
 
