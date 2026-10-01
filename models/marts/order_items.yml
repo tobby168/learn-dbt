@@ -59,7 +59,9 @@ models:
         description: The median revenue generated for each order item. Excludes tax.
         label: Median Revenue
         type: simple
-        agg: median
+        agg: percentile
+        percentile: 0.5
+        percentile_type: continuous
         expr: product_price
 
 metrics:

@@ -79,8 +79,8 @@ BigQuery 版本的 macro（`bigquery__cents_to_dollars`）。
 
 - `dbt build` 建 view 和 table 用的是 DDL，不受影響（dbt 官方 quickstart 就是在沒開 billing 的專案做的）。
 - **incremental model 和 snapshot 需要 DML**，在沙盒會失敗，所以 [01](01-models.md) 的練習 4 要先升級。
-- seed 在「v2 + BigQuery 沙盒」下能不能載入，**我沒有驗證**（我沒有 GCP 帳號）。如果 `dbt seed` 失敗，
-  請升級。
+- seed 在「v2 + BigQuery 沙盒」下能不能載入，**沒有驗證**：本專案實測用的是已開 billing 的專案（見 [04](04-bigquery-notes.md)）。
+  如果在沙盒 `dbt seed` 失敗，請升級。
 - 升級的做法是替專案開 billing 帳號。Google 說明開了之後，免費額度仍然保留，超過才收費；
   本專案的資料只有約 16 MB，遠低於額度。建議在 Google Cloud 設定預算提醒。
 

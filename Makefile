@@ -8,8 +8,13 @@ MF       := $(MF_VENV)/bin/mf
 # without a dbt platform login dbt v2 would only print a warning about it.
 export DBT_ENGINE_NO_WARN_SEMANTIC_MANIFEST_VALIDATION := 1
 
+# BigQuery settings (GCP_PROJECT_ID, BQ_DATASET, BQ_LOCATION) live in .env, see .env.example.
+-include .env
+export
+BQ_TARGET := bigquery
+
 .DEFAULT_GOAL := help
-.PHONY: help all setup deps seed build parse metrics-list metrics-validate metrics-query clean
+.PHONY: help all setup deps seed build parse metrics-list metrics-validate metrics-query clean bq-check bq-seed bq-build bq-metrics bq-all
 
 help: ## Show this help
 	@grep -E '^[a-z-]+:.*## ' $(MAKEFILE_LIST) | awk -F':.*## ' '{printf "  %-18s %s\n", $$1, $$2}'
@@ -48,6 +53,22 @@ metrics-validate: $(MF) parse ## Validate semantic models and metrics against Du
 
 metrics-query: $(MF) parse ## Example metric query: orders and revenue by month
 	$(MF) query --metrics orders,order_total --group-by metric_time__month --order metric_time__month --limit 6
+
+bq-check: $(DBT) ## Verify the BigQuery connection (needs .env and `gcloud auth application-default login`)
+	$(DBT) debug --target $(BQ_TARGET)
+
+bq-seed: $(DBT) deps ## Load the sample data into BigQuery (dataset: raw)
+	$(DBT) seed --target $(BQ_TARGET) --full-refresh --vars '{"load_source_data": true}'
+
+bq-build: $(DBT) ## Build all models and run all tests against BigQuery
+	$(DBT) build --target $(BQ_TARGET)
+
+# parse and mf must use the same target: mf reads target/semantic_manifest.json as last written.
+bq-metrics: $(DBT) $(MF) ## Validate semantic models and metrics against BigQuery
+	DBT_TARGET=$(BQ_TARGET) $(DBT) parse
+	DBT_TARGET=$(BQ_TARGET) $(MF) validate-configs
+
+bq-all: bq-check bq-seed bq-build bq-metrics ## Run the whole flow against BigQuery
 
 clean: ## Remove build output and the local DuckDB file (keeps the virtualenvs)
 	rm -rf target dbt_packages logs jaffle_shop.duckdb jaffle_shop.duckdb.wal

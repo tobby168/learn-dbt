@@ -1,11 +1,21 @@
-# Local DuckDB profile for dbt v2 (no warehouse account needed).
-# dbt resolves `path` relative to this file. dbt platform ignores this file
-# and uses the connection you configure in the UI instead.
+# Profiles for dbt v2. dbt platform ignores this file and uses the connection
+# configured in the UI instead.
 default:
-  target: dev
+  target: "{{ env_var('DBT_TARGET', 'dev') }}"
   outputs:
+    # Local DuckDB (no warehouse account needed). `path` is relative to this file.
     dev:
       type: duckdb
       path: ./jaffle_shop.duckdb
       schema: main
+      threads: 4
+
+    # BigQuery via Application Default Credentials (`gcloud auth application-default login`).
+    # All values come from the environment, see .env.example.
+    bigquery:
+      type: bigquery
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      schema: "{{ env_var('BQ_DATASET', 'prod') }}"
+      location: "{{ env_var('BQ_LOCATION', 'US') }}"
       threads: 4

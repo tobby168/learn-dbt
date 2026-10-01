@@ -26,6 +26,25 @@ make metrics-query     # 查詢範例：每月訂單數與營收
 
 `make all` 會依序執行 setup → deps → seed → build → metrics-validate。`make help` 列出所有指令。
 
+## 連 BigQuery
+
+已用 BigQuery（billing 已啟用、location US）實測通過：6 seeds + 13 models + 27 tests + 3 unit tests，
+`mf validate-configs` 0 errors。
+
+```bash
+brew install --cask google-cloud-sdk
+gcloud auth login && gcloud auth application-default login   # dbt 用 ADC，不需要 JSON key
+gcloud projects create <project-id> && gcloud billing projects link <project-id> --billing-account=<id>
+gcloud services enable bigquery.googleapis.com bigquerystorage.googleapis.com --project=<project-id>
+bq --project_id=<project-id> mk --dataset --location=US <project-id>:raw
+bq --project_id=<project-id> mk --dataset --location=US <project-id>:prod
+cp .env.example .env   # 填入 GCP_PROJECT_ID，.env 不會被 commit
+make bq-all            # bq-check → bq-seed → bq-build → bq-metrics
+```
+
+連線設定全部來自 `.env`（`GCP_PROJECT_ID`、`BQ_DATASET`、`BQ_LOCATION`），見 `profiles.yml` 的 `bigquery` target。
+跨 adapter 的踩坑紀錄見 [docs/04-bigquery-notes.md](docs/04-bigquery-notes.md)。
+
 ## 學習順序
 
 | 主題 | 文件 | 需要 |
@@ -33,6 +52,7 @@ make metrics-query     # 查詢範例：每月訂單數與營收
 | Models、tests、macros | [docs/01-models.md](docs/01-models.md) | 本機（免費） |
 | Semantic layer、metrics | [docs/02-metrics.md](docs/02-metrics.md) | 本機（免費） |
 | Studio IDE、AI、部署、production job | [docs/03-dbt-platform.md](docs/03-dbt-platform.md) | dbt platform 帳號 + 雲端 warehouse |
+| BigQuery 實測與踩坑 | [docs/04-bigquery-notes.md](docs/04-bigquery-notes.md) | GCP project |
 
 ## 專案結構
 
@@ -41,7 +61,8 @@ models/staging/   source 與 staging models（view）
 models/marts/     分析用的 marts 與 metrics 定義（table）
 seeds/            jaffle-shop 範例資料（預設停用，make seed 才會載入）
 macros/           cents_to_dollars、generate_schema_name
-profiles.yml      本機 DuckDB 連線
+profiles.yml      本機 DuckDB 與 BigQuery 連線（BigQuery 設定來自 .env）
+.env.example      BigQuery 設定範本
 Makefile          本機工作流程
 .github/workflows/dbt-ci.yml   每次 push 跑一遍 make all
 ```
