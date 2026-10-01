@@ -1,0 +1,5 @@
+# MetricFlow CLI (`mf`) for querying metrics locally against DuckDB.
+# Install in its own virtualenv, never next to dbt v2 (see requirements.txt).
+dbt-metricflow>=0.15
+dbt-duckdb>=1.11
+dbt-bigquery>=1.11

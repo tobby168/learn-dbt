@@ -1,0 +1,21 @@
+.venv
+.venv-*/
+venv
+.env
+env
+
+target/
+dbt_packages/
+logs/
+
+.DS_Store
+
+.user.yml
+
+.ruff_cache
+__pycache__
+dbt_internal_packages/
+
+# DuckDB local database
+*.duckdb
+*.duckdb.wal
