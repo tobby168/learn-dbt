@@ -1,8 +1,10 @@
 # 03 · dbt platform：Studio IDE、AI、部署與 production job
 
-> **驗證狀態：** 01、02 篇的指令都在本機實測過。這一篇需要你自己的 dbt platform 帳號和雲端 warehouse，
-> 我沒辦法代為執行，步驟來自官方文件和 jaffle-shop 上游 README（2026-10 查閱），
-> 實際畫面可能有出入，以官方文件為準。
+> **驗證狀態（2026-10-01）：** 01、02 篇的指令都在本機實測過。BigQuery、Studio IDE 的
+> `dbt deps` / `dbt seed` / `dbt build`、Production environment 與 job 的 **Run now**，以及
+> Looker Studio 連 `prod` 都已用 Developer 方案實際跑通（由使用者操作平台，BigQuery 端由我用 gcloud/bq 驗證）。
+> 其餘部分（Wizard、排程、Starter 的 Semantic Layer、CI job）沒有實測，步驟來自官方文件
+> 和 jaffle-shop 上游 README，實際畫面可能有出入，以官方文件為準。
 
 ## 方案與限制（來自[官方定價頁](https://www.getdbt.com/pricing)）
 
@@ -136,6 +138,9 @@ dbt seed --full-refresh --vars '{"load_source_data": true}'
 dbt build
 ```
 
+實測結果：開發環境的 models 會建在你個人的 dataset（例如 `dbt_<名字>`，13 個物件，和 `prod` 相同），
+seed 則固定寫入 `raw`。
+
 載入資料後，記得依上游 README 的建議，刪掉 `seeds/jaffle-data`，或移除 `dbt_project.yml` 裡
 `jaffle-data` 的設定，避免之後每次 seed 都重載。
 
@@ -146,6 +151,10 @@ dbt build
 3. **dbt 版本選 v2.0.0 以上**；Branch 設成 `main`，schema 設成 `prod`。
 4. 在 `Prod` 裡 **Create job** → Deploy job，名稱 `Production Build`，指令用 `dbt build`。
 5. 設定排程（建議先每天一次），按 **Run now** 手動跑一次，確認成功。
+
+**Production job 不要帶 `--vars '{"load_source_data": true}'`。** `seeds/jaffle-data` 預設是停用的，
+所以 `dbt build` 只重建 models 並跑 tests，`raw` 的原始資料保持原樣；帶了這個 var 才會用 seed 重載 `raw`。
+本專案沒有 incremental model，所以每次 `dbt build` 都是整張重建（view 重新建立、table `CREATE OR REPLACE`）。
 
 > 這就是「production job」的核心概念：job 永遠在 `main` 分支、建到 `prod` schema，開發時的實驗
 > 只會進你自己的 dev schema，不會動到 production 的資料。
@@ -169,11 +178,34 @@ Developer 方案包含 GitHub 的 CI checks（定價頁的「Advanced CI」則�
 和本機的 `mf` 對應。
 來源：[Administer the Semantic Layer](https://docs.getdbt.com/docs/use-dbt-semantic-layer/setup-sl)
 
+## 看算出來的 metrics 與接 BI 工具
+
+- **Metric 不是 BigQuery 裡的物件。** 定義在 `models/marts/*.yml`，編譯成 `target/semantic_manifest.json`；
+  查詢時 MetricFlow 依定義即時產生 SQL 丟給 warehouse，結果不會寫回。BigQuery 裡只有底層的 marts table。
+  本機可用 `mf query --explain` 看產生的 SQL，例如 `order_total` 會變成對 `prod.orders` 的
+  `SUM(order_total) ... GROUP BY TIMESTAMP_TRUNC(ordered_at, month)`。
+- **Studio IDE 的 `dbt sl query`：** 官方文件列為 Studio IDE 支援，但 Developer 方案能不能用，
+  文件說法有出入，**沒有驗證**。
+- **Developer 方案沒有 Semantic Layer API**，BI 工具不能直接用 metrics，只能連 `prod` 的 marts table
+  （`orders`、`order_items`、`customers`、`products`、`locations`），在 BI 端自己寫聚合。
+
+### Looker Studio（免費，已實測）
+
+1. [lookerstudio.google.com](https://lookerstudio.google.com) → Create → Report → **BigQuery** 連接器，
+   選 `<GCP project>` → `prod` → `orders`。
+2. 時間序列：維度 `ordered_at`（年月），指標 `order_total`（Sum）。
+3. 對數字：2024-09 的 `order_total` 應該是 **16,130.21**，與 `dbt sl query` / `mf query` 一致。
+
+**踩坑：** 我們的資料只涵蓋 2024-09-01 到 2025-08-31。Looker Studio 的日期範圍預設為「自動」
+（過去 28 天），會讓圖表只涵蓋到一部分資料，曾看到 651.86（剛好是 2024-09-30 單日的合計）而不是整月的 16,130.21。
+日期範圍要手動設成自訂 `2024-09-01` ～ `2025-08-31`。換成「表格」維度 `ordered_at`（年月）會直接看到正確的 12 列。
+
 ## 檢查清單
 
-- [ ] Developer 帳號建立，warehouse 連線成功
-- [ ] Studio IDE 裡 `dbt build` 全部通過
-- [ ] `Prod` environment（v2.0.0+、`main`、`prod` schema）和 `Production Build` job 成功執行過
+- [x] Developer 帳號建立，warehouse 連線成功
+- [x] Studio IDE 裡 `dbt build` 全部通過
+- [x] `Prod` environment（v2.0.0+、`main`、`prod` schema）和 production job 成功執行過（Run now）
+- [x] Looker Studio 連 `prod`，數字與 metric 一致
 - [ ] 排程已設定，並在用量頁面確認沒有逼近 3,000 models
 - [ ] （選做）Wizard 試用，或改用 BYOK
 - [ ] （選做）Starter 試用：Semantic Layer 憑證、service token、從外部查詢 metrics
